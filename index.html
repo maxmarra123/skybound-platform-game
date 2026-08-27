@@ -33,18 +33,18 @@
       [785, 500, 145, 26], [990, 416, 125, 26], [1115, 570, 165, 150], [892, 310, 150, 24],
       [648, 273, 135, 24], [400, 340, 124, 24], [157, 405, 112, 24]
     ],
-    spikes: [[290, 625, 85], [545, 625, 76], [735, 625, 120], [930, 625, 110]],
+    spikes: [[545, 625, 42], [930, 625, 48]],
     gems: [[300, 515], [472, 450], [668, 375], [853, 445], [1046, 363], [961, 259], [703, 222], [455, 289], [207, 355]],
-    enemies: [[456,470,424,520,70],[804,470,785,895,82],[1002,386,990,1080,55]],
-    movers: [[580,545,38,22,'x',105,92],[708,387,34,22,'y',88,78]],
+    enemies: [[804,470,800,870,48]],
+    movers: [[708,387,34,22,'y',54,48]],
     goal: [1180, 480]
   }, {
     name: 'Moonlit Ruins', sky: ['#24275f','#5967ae','#f1a6c5'], ground: '#8fcaea', spawn: [62,520],
     platforms: [[0,642,205,78],[265,554,112,26],[445,470,100,26],[620,548,92,26],[785,455,112,26],[965,365,104,26],[1130,510,150,210],[925,245,100,24],[715,320,95,24],[520,270,95,24],[320,350,92,24],[142,435,90,24]],
-    spikes: [[205,625,92],[377,625,110],[545,625,95],[712,625,106],[895,625,120]],
+    spikes: [[377,625,56],[712,625,58],[895,625,65]],
     gems: [[315,505],[495,420],[665,497],[840,405],[1016,315],[975,195],[760,270],[567,220],[365,300],[185,386]],
-    enemies: [[275,524,265,345,75],[790,425,785,865,90],[936,340,925,1028,62]],
-    movers: [[390,590,38,22,'x',80,105],[570,248,34,22,'y',78,84],[875,300,34,22,'x',68,96]],
+    enemies: [[790,425,790,850,58],[936,340,930,1010,45]],
+    movers: [[570,248,34,22,'y',54,54],[875,300,34,22,'x',48,58]],
     goal: [1190,420]
   }, {
     name: 'Sunspire Summit', sky: ['#3d194f','#b04f94','#ffd477'], ground: '#ffd87e', spawn: [54,520],
@@ -56,11 +56,11 @@
     goal: [1195,355]
   }];
   let levelIndex = 0, level = levels[0];
-  const player = { x: 74, y: 520, w: 36, h: 48, vx: 0, vy: 0, grounded: false, coyote: 0, score: 0, facing: 1 };
+  const player = { x: 74, y: 520, w: 36, h: 48, vx: 0, vy: 0, grounded: false, coyote: 0, score: 0, lives: 3, facing: 1 };
   let gems = [], enemies = [], movers = [];
   function loadLevel(index) { levelIndex=index; level=levels[index]; gems=level.gems.map(([x,y])=>({x,y,taken:false,phase:Math.random()*6.28})); enemies=level.enemies.map(([x,y,min,max,speed])=>({x,y,min,max,speed,dir:1,w:34,h:30})); movers=level.movers.map(([x,y,w,h,axis,travel,speed])=>({x,y,homeX:x,homeY:y,w,h,axis,travel,speed,dir:1})); const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); notice=2.2; }
-  function reset() { won=false; loadLevel(0); }
-  function respawn() { const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); gems.forEach(g=>g.taken=false); }
+  function reset() { won=false; player.lives=3; loadLevel(0); }
+  function respawn() { player.lives--; if(player.lives<=0) { reset(); return; } const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); gems.forEach(g=>g.taken=false); }
   loadLevel(0);
   addEventListener('keydown', e => { const k=e.key.toLowerCase(); if (['arrowleft','arrowright','arrowup',' ','a','d','w','r'].includes(k)) e.preventDefault(); keys.add(k); if([' ','arrowup','w'].includes(k)) jumpQueued=true; if(k==='r') reset(); });
   addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -109,7 +109,7 @@
     // player
     ctx.save();ctx.translate(player.x+18,player.y+24);ctx.scale(player.facing,1);ctx.fillStyle='#f16177';ctx.beginPath();ctx.arc(0,-5,19,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffca8e';ctx.beginPath();ctx.arc(0,-7,12,0,Math.PI*2);ctx.fill();ctx.fillStyle='#27335d';ctx.fillRect(4,-10,4,5);ctx.fillStyle='#fff';ctx.fillRect(5,-9,1,2);ctx.fillStyle='#f16177';ctx.fillRect(-17,13,12,14);ctx.fillRect(5,13,12,14);ctx.restore();
     ctx.restore();
-    roundRect(22,20,292,58,17,'#17264bbb');ctx.fillStyle='#fff';ctx.font='700 19px ui-rounded, system-ui';ctx.fillText('SKYBOUND  ·  '+(levelIndex+1)+'/'+levels.length,42,43);ctx.fillStyle='#ffe56a';ctx.font='700 17px ui-rounded, system-ui';ctx.fillText('✦ '+player.score+' / '+gems.length+'  '+level.name,42,66);
+    roundRect(22,20,330,58,17,'#17264bbb');ctx.fillStyle='#fff';ctx.font='700 19px ui-rounded, system-ui';ctx.fillText('SKYBOUND  ·  '+(levelIndex+1)+'/'+levels.length,42,43);ctx.fillStyle='#ffe56a';ctx.font='700 17px ui-rounded, system-ui';ctx.fillText('✦ '+player.score+' / '+gems.length+'   ♥ '+player.lives+'   '+level.name,42,66);
     if(notice>0&&!won){ctx.globalAlpha=Math.min(1,notice*2);roundRect(420,38,440,52,17,'#17264b99');ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='700 21px ui-rounded, system-ui';ctx.fillText('LEVEL '+(levelIndex+1)+' — '+level.name,640,71);ctx.textAlign='left';ctx.globalAlpha=1;}
     if(won){ctx.fillStyle='#101b3ad9';ctx.fillRect(0,0,W,H);roundRect(335,184,610,340,30,'#263c70');ctx.fillStyle='#ffe572';ctx.font='bold 58px ui-rounded, system-ui';ctx.textAlign='center';ctx.fillText('YOU DID IT!',640,292);ctx.fillStyle='#f6f7ff';ctx.font='22px ui-rounded, system-ui';ctx.fillText('You conquered all three Skybound trails.',640,343);ctx.fillStyle='#bad4ff';ctx.font='18px ui-rounded, system-ui';ctx.fillText('Click anywhere or press R to play again',640,452);ctx.textAlign='left';}
   }
