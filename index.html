@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skybound — A Tiny Platform Adventure</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; overflow: hidden; background: #10162e; font-family: ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui, sans-serif; }
+    #wrap { width: min(100vw, 1100px); padding: 16px; }
+    canvas { display: block; width: 100%; max-height: 82vh; aspect-ratio: 16 / 9; border-radius: 22px; background: #8bd5f7; box-shadow: 0 24px 90px #030819aa, inset 0 0 0 3px #ffffff40; touch-action: none; }
+    .hint { color: #d9e5ff; text-align: center; font-size: .85rem; margin: 12px 0 0; letter-spacing: .02em; }
+    kbd { display: inline-block; padding: 2px 7px; border-radius: 6px; background: #2a3966; border: 1px solid #6477ad; box-shadow: 0 2px 0 #121a33; }
+  </style>
+</head>
+<body>
+  <main id="wrap">
+    <canvas id="game" width="1280" height="720" aria-label="Skybound platform game"></canvas>
+    <p class="hint"><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to move · <kbd>Space</kbd> / <kbd>W</kbd> / <kbd>↑</kbd> to jump · collect all starlight · avoid the guardians and spinning hazards</p>
+  </main>
+<script>
+(() => {
+  const canvas = document.querySelector('#game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const keys = new Set();
+  let jumpQueued = false, won = false, time = 0, shake = 0, notice = 2;
+  const levels = [{
+    name: 'Cloudstep Meadow', sky: ['#70c9f2','#bde9ff','#e5d5ff'], ground: '#86df96', spawn: [74,520],
+    platforms: [
+      [0, 642, 280, 78], [220, 565, 154, 26], [424, 500, 128, 26], [610, 428, 126, 26],
+      [785, 500, 145, 26], [990, 416, 125, 26], [1115, 570, 165, 150], [892, 310, 150, 24],
+      [648, 273, 135, 24], [400, 340, 124, 24], [157, 405, 112, 24]
+    ],
+    spikes: [[290, 625, 85], [545, 625, 76], [735, 625, 120], [930, 625, 110]],
+    gems: [[300, 515], [472, 450], [668, 375], [853, 445], [1046, 363], [961, 259], [703, 222], [455, 289], [207, 355]],
+    enemies: [[456,470,424,520,70],[804,470,785,895,82],[1002,386,990,1080,55]],
+    movers: [[580,545,38,22,'x',105,92],[708,387,34,22,'y',88,78]],
+    goal: [1180, 480]
+  }, {
+    name: 'Moonlit Ruins', sky: ['#24275f','#5967ae','#f1a6c5'], ground: '#8fcaea', spawn: [62,520],
+    platforms: [[0,642,205,78],[265,554,112,26],[445,470,100,26],[620,548,92,26],[785,455,112,26],[965,365,104,26],[1130,510,150,210],[925,245,100,24],[715,320,95,24],[520,270,95,24],[320,350,92,24],[142,435,90,24]],
+    spikes: [[205,625,92],[377,625,110],[545,625,95],[712,625,106],[895,625,120]],
+    gems: [[315,505],[495,420],[665,497],[840,405],[1016,315],[975,195],[760,270],[567,220],[365,300],[185,386]],
+    enemies: [[275,524,265,345,75],[790,425,785,865,90],[936,340,925,1028,62]],
+    movers: [[390,590,38,22,'x',80,105],[570,248,34,22,'y',78,84],[875,300,34,22,'x',68,96]],
+    goal: [1190,420]
+  }, {
+    name: 'Sunspire Summit', sky: ['#3d194f','#b04f94','#ffd477'], ground: '#ffd87e', spawn: [54,520],
+    platforms: [[0,642,165,78],[226,570,82,26],[374,500,76,26],[520,427,74,26],[663,355,72,26],[807,425,72,26],[955,342,76,26],[1115,445,165,275],[930,226,72,24],[774,255,70,24],[610,205,70,24],[442,275,70,24],[282,335,70,24],[125,415,70,24]],
+    spikes: [[165,625,80],[308,625,95],[450,625,95],[594,625,95],[735,625,95],[878,625,95],[1032,625,88]],
+    gems: [[267,520],[412,450],[557,378],[700,306],[843,377],[993,294],[965,177],[810,205],[645,155],[477,225],[317,285],[160,365]],
+    enemies: [[378,470,374,432,88],[665,325,663,703,102],[960,312,955,1018,80]],
+    movers: [[330,550,36,22,'x',80,118],[495,405,34,22,'y',92,90],[745,230,34,22,'x',72,112],[1035,315,34,22,'y',82,92]],
+    goal: [1195,355]
+  }];
+  let levelIndex = 0, level = levels[0];
+  const player = { x: 74, y: 520, w: 36, h: 48, vx: 0, vy: 0, grounded: false, coyote: 0, score: 0, facing: 1 };
+  let gems = [], enemies = [], movers = [];
+  function loadLevel(index) { levelIndex=index; level=levels[index]; gems=level.gems.map(([x,y])=>({x,y,taken:false,phase:Math.random()*6.28})); enemies=level.enemies.map(([x,y,min,max,speed])=>({x,y,min,max,speed,dir:1,w:34,h:30})); movers=level.movers.map(([x,y,w,h,axis,travel,speed])=>({x,y,homeX:x,homeY:y,w,h,axis,travel,speed,dir:1})); const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); notice=2.2; }
+  function reset() { won=false; loadLevel(0); }
+  function respawn() { const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); gems.forEach(g=>g.taken=false); }
+  loadLevel(0);
+  addEventListener('keydown', e => { const k=e.key.toLowerCase(); if (['arrowleft','arrowright','arrowup',' ','a','d','w','r'].includes(k)) e.preventDefault(); keys.add(k); if([' ','arrowup','w'].includes(k)) jumpQueued=true; if(k==='r') reset(); });
+  addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+  canvas.addEventListener('pointerdown', e => { if(won) reset(); else jumpQueued=true; });
+  const rectsIntersect=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+  function update(dt) {
+    time += dt; shake=Math.max(0,shake-dt*22);
+    notice=Math.max(0,notice-dt); if(won) return;
+    const left=keys.has('arrowleft')||keys.has('a'), right=keys.has('arrowright')||keys.has('d');
+    const target=(right?1:0)-(left?1:0), accel=player.grounded?1800:1000;
+    player.vx += (target*310-player.vx)*Math.min(1,accel*dt/310);
+    if(target) player.facing=target;
+    player.coyote=player.grounded?.11:Math.max(0,player.coyote-dt);
+    if(jumpQueued && player.coyote>0) { player.vy=-592; player.grounded=false; player.coyote=0; }
+    jumpQueued=false;
+    player.vy+=1540*dt; player.vy=Math.min(player.vy,760);
+    player.x+=player.vx*dt; player.x=Math.max(0,Math.min(W-player.w,player.x));
+    player.y+=player.vy*dt; player.grounded=false;
+    for(const [x,y,w,h] of level.platforms) {
+      const p={x,y,w,h};
+      if(rectsIntersect(player,p) && player.vy>=0 && player.y+player.h-player.vy*dt<=y+7) { player.y=y-player.h; player.vy=0; player.grounded=true; }
+    }
+    for(const enemy of enemies) { enemy.x+=enemy.speed*enemy.dir*dt; if(enemy.x<enemy.min||enemy.x>enemy.max) { enemy.x=Math.max(enemy.min,Math.min(enemy.max,enemy.x)); enemy.dir*=-1; } }
+    for(const mover of movers) { if(mover.axis==='x') mover.x+=mover.speed*mover.dir*dt; else mover.y+=mover.speed*mover.dir*dt; const value=mover.axis==='x'?mover.x-mover.homeX:mover.y-mover.homeY; if(Math.abs(value)>=mover.travel) { if(mover.axis==='x') mover.x=mover.homeX+Math.sign(value)*mover.travel; else mover.y=mover.homeY+Math.sign(value)*mover.travel; mover.dir*=-1; } }
+    const hit=thing=>rectsIntersect(player,thing);
+    if(level.spikes.some(([x,y,w])=>hit({x,y,w,h:22})) || enemies.some(hit) || movers.some(hit)) { shake=12; respawn(); }
+    for(const g of gems) if(!g.taken && Math.hypot(player.x+18-g.x,player.y+24-g.y)<35) { g.taken=true; player.score++; }
+    const all=gems.every(g=>g.taken); const [gx,gy]=level.goal;
+    if(all && Math.hypot(player.x+18-gx,player.y+24-gy)<55) { if(levelIndex===levels.length-1) won=true; else loadLevel(levelIndex+1); }
+    if(player.y>H+80) respawn();
+  }
+  function cloud(x,y,s) { ctx.fillStyle='#fff9'; ctx.beginPath(); ctx.arc(x,y,20*s,0,7);ctx.arc(x+27*s,y-14*s,28*s,0,7);ctx.arc(x+62*s,y,21*s,0,7);ctx.fill(); }
+  function roundRect(x,y,w,h,r,fill) { ctx.fillStyle=fill; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+  function draw() {
+    const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,level.sky[0]);g.addColorStop(.62,level.sky[1]);g.addColorStop(1,level.sky[2]);ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    cloud(80+Math.sin(time*.1)*30,105,1.15); cloud(710+Math.sin(time*.13)*34,115,.75); cloud(1050+Math.sin(time*.08)*22,210,.58);
+    ctx.fillStyle='#a988d4'; for(let i=0;i<9;i++){let x=i*170-50,y=430+(i%3)*35;ctx.beginPath();ctx.moveTo(x,H);ctx.lineTo(x+115,y);ctx.lineTo(x+250,H);ctx.fill();}
+    ctx.save(); if(shake){ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake)}
+    for(const [x,y,w,h] of level.platforms){ roundRect(x,y,w,h,9,'#563b75'); roundRect(x,y,w,8,8,level.ground); ctx.fillStyle='#5c4b84'; ctx.fillRect(x+10,y+10,w-20,h-10); }
+    for(const [x,y,w] of level.spikes){ctx.fillStyle='#e85a7f'; for(let i=x;i<x+w;i+=17){ctx.beginPath();ctx.moveTo(i,y+21);ctx.lineTo(i+8.5,y);ctx.lineTo(i+17,y+21);ctx.fill();}}
+    for(const mover of movers){ctx.save();ctx.translate(mover.x+mover.w/2,mover.y+mover.h/2);ctx.rotate(time*4);ctx.fillStyle='#f4efff';ctx.beginPath();for(let i=0;i<12;i++){const a=i*Math.PI/6,r=i%2?mover.h*.42:mover.h*.72;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}ctx.fill();ctx.fillStyle='#e65378';ctx.beginPath();ctx.arc(0,0,mover.h*.24,0,7);ctx.fill();ctx.restore();}
+    for(const enemy of enemies){ctx.save();ctx.translate(enemy.x+enemy.w/2,enemy.y+enemy.h/2);ctx.scale(enemy.dir,1);roundRect(-17,-13,34,26,12,'#334273');ctx.fillStyle='#ffdc72';ctx.fillRect(4,-5,6,7);ctx.fillStyle='#fff';ctx.fillRect(6,-4,2,2);ctx.fillStyle='#26315c';ctx.fillRect(-15,12,10,6);ctx.fillRect(5,12,10,6);ctx.restore();}
+    const [gx,gy]=level.goal; ctx.fillStyle='#7a4ca0';ctx.fillRect(gx-3,gy-74,6,75);roundRect(gx-28,gy-74,54,28,7, gems.every(g=>g.taken)?'#ffd55b':'#b7a8c9');
+    if(gems.every(g=>g.taken)){ctx.fillStyle='#fff2a8';ctx.font='bold 18px system-ui';ctx.fillText('GO!',gx-20,gy-95);}
+    for(const gem of gems) if(!gem.taken){ const bob=Math.sin(time*4+gem.phase)*5;ctx.save();ctx.translate(gem.x,gem.y+bob);ctx.rotate(time*2);ctx.fillStyle='#ffe76a';ctx.beginPath();ctx.moveTo(0,-13);ctx.lineTo(9,0);ctx.lineTo(0,13);ctx.lineTo(-9,0);ctx.fill();ctx.restore(); }
+    // player
+    ctx.save();ctx.translate(player.x+18,player.y+24);ctx.scale(player.facing,1);ctx.fillStyle='#f16177';ctx.beginPath();ctx.arc(0,-5,19,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffca8e';ctx.beginPath();ctx.arc(0,-7,12,0,Math.PI*2);ctx.fill();ctx.fillStyle='#27335d';ctx.fillRect(4,-10,4,5);ctx.fillStyle='#fff';ctx.fillRect(5,-9,1,2);ctx.fillStyle='#f16177';ctx.fillRect(-17,13,12,14);ctx.fillRect(5,13,12,14);ctx.restore();
+    ctx.restore();
+    roundRect(22,20,292,58,17,'#17264bbb');ctx.fillStyle='#fff';ctx.font='700 19px ui-rounded, system-ui';ctx.fillText('SKYBOUND  ·  '+(levelIndex+1)+'/'+levels.length,42,43);ctx.fillStyle='#ffe56a';ctx.font='700 17px ui-rounded, system-ui';ctx.fillText('✦ '+player.score+' / '+gems.length+'  '+level.name,42,66);
+    if(notice>0&&!won){ctx.globalAlpha=Math.min(1,notice*2);roundRect(420,38,440,52,17,'#17264b99');ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='700 21px ui-rounded, system-ui';ctx.fillText('LEVEL '+(levelIndex+1)+' — '+level.name,640,71);ctx.textAlign='left';ctx.globalAlpha=1;}
+    if(won){ctx.fillStyle='#101b3ad9';ctx.fillRect(0,0,W,H);roundRect(335,184,610,340,30,'#263c70');ctx.fillStyle='#ffe572';ctx.font='bold 58px ui-rounded, system-ui';ctx.textAlign='center';ctx.fillText('YOU DID IT!',640,292);ctx.fillStyle='#f6f7ff';ctx.font='22px ui-rounded, system-ui';ctx.fillText('You conquered all three Skybound trails.',640,343);ctx.fillStyle='#bad4ff';ctx.font='18px ui-rounded, system-ui';ctx.fillText('Click anywhere or press R to play again',640,452);ctx.textAlign='left';}
+  }
+  let last=performance.now();function loop(now){const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
