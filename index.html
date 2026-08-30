@@ -56,9 +56,9 @@
     goal: [1195,355]
   }];
   let levelIndex = 0, level = levels[0];
-  const player = { x: 74, y: 520, w: 36, h: 48, vx: 0, vy: 0, grounded: false, coyote: 0, score: 0, lives: 3, facing: 1 };
+  const player = { x: 74, y: 520, w: 36, h: 48, vx: 0, vy: 0, grounded: false, coyote: 0, score: 0, lives: 3, land: 0, facing: 1 };
   let gems = [], enemies = [], movers = [];
-  function loadLevel(index) { levelIndex=index; level=levels[index]; gems=level.gems.map(([x,y])=>({x,y,taken:false,phase:Math.random()*6.28})); enemies=level.enemies.map(([x,y,min,max,speed])=>({x,y,min,max,speed,dir:1,w:34,h:30})); movers=level.movers.map(([x,y,w,h,axis,travel,speed])=>({x,y,homeX:x,homeY:y,w,h,axis,travel,speed,dir:1})); const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); notice=2.2; }
+  function loadLevel(index) { levelIndex=index; level=levels[index]; gems=level.gems.map(([x,y])=>({x,y,taken:false,phase:Math.random()*6.28})); enemies=level.enemies.map(([x,y,min,max,speed])=>({x,y,min,max,speed,dir:1,w:34,h:30})); movers=level.movers.map(([x,y,w,h,axis,travel,speed])=>({x,y,homeX:x,homeY:y,w,h,axis,travel,speed,dir:1})); const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,land:0,facing:1}); notice=2.2; }
   function reset() { won=false; player.lives=3; loadLevel(0); }
   function respawn() { player.lives--; if(player.lives<=0) { reset(); return; } const [x,y]=level.spawn; Object.assign(player,{x,y,vx:0,vy:0,grounded:false,coyote:0,score:0,facing:1}); gems.forEach(g=>g.taken=false); }
   loadLevel(0);
@@ -68,7 +68,7 @@
   const rectsIntersect=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
   function update(dt) {
     time += dt; shake=Math.max(0,shake-dt*22);
-    notice=Math.max(0,notice-dt); if(won) return;
+    notice=Math.max(0,notice-dt); if(won) return; const wasGrounded=player.grounded;
     const left=keys.has('arrowleft')||keys.has('a'), right=keys.has('arrowright')||keys.has('d');
     const target=(right?1:0)-(left?1:0), accel=player.grounded?1800:1000;
     player.vx += (target*310-player.vx)*Math.min(1,accel*dt/310);
@@ -83,6 +83,7 @@
       const p={x,y,w,h};
       if(rectsIntersect(player,p) && player.vy>=0 && player.y+player.h-player.vy*dt<=y+7) { player.y=y-player.h; player.vy=0; player.grounded=true; }
     }
+    if(player.grounded&&!wasGrounded) player.land=1; player.land=Math.max(0,player.land-dt*8);
     for(const enemy of enemies) { enemy.x+=enemy.speed*enemy.dir*dt; if(enemy.x<enemy.min||enemy.x>enemy.max) { enemy.x=Math.max(enemy.min,Math.min(enemy.max,enemy.x)); enemy.dir*=-1; } }
     for(const mover of movers) { if(mover.axis==='x') mover.x+=mover.speed*mover.dir*dt; else mover.y+=mover.speed*mover.dir*dt; const value=mover.axis==='x'?mover.x-mover.homeX:mover.y-mover.homeY; if(Math.abs(value)>=mover.travel) { if(mover.axis==='x') mover.x=mover.homeX+Math.sign(value)*mover.travel; else mover.y=mover.homeY+Math.sign(value)*mover.travel; mover.dir*=-1; } }
     const hit=thing=>rectsIntersect(player,thing);
@@ -92,12 +93,11 @@
     if(all && Math.hypot(player.x+18-gx,player.y+24-gy)<55) { if(levelIndex===levels.length-1) won=true; else loadLevel(levelIndex+1); }
     if(player.y>H+80) respawn();
   }
-  function cloud(x,y,s) { ctx.fillStyle='#fff9'; ctx.beginPath(); ctx.arc(x,y,20*s,0,7);ctx.arc(x+27*s,y-14*s,28*s,0,7);ctx.arc(x+62*s,y,21*s,0,7);ctx.fill(); }
+  function stadium() { ctx.fillStyle='#779db7';ctx.fillRect(0,198,W,260);ctx.fillStyle='#e8edf2';ctx.fillRect(0,205,W,14);ctx.fillStyle='#8b1538';for(let y=224;y<412;y+=20){ctx.fillRect(0,y,W,9);ctx.fillStyle='#a9274c';for(let x=(y%40?0:35);x<W;x+=70)ctx.fillRect(x,y+10,38,8);ctx.fillStyle='#8b1538';}ctx.fillStyle='#5d6570';ctx.fillRect(0,418,W,20);ctx.fillStyle='#356d48';ctx.fillRect(0,438,W,282);ctx.strokeStyle='#eff7e8';ctx.lineWidth=3;for(let x=80;x<W;x+=120){ctx.beginPath();ctx.moveTo(x,438);ctx.lineTo(x,720);ctx.stroke();}ctx.fillStyle='#263343';ctx.fillRect(505,82,270,94);ctx.fillStyle='#b20b2d';ctx.font='bold 19px Arial';ctx.textAlign='center';ctx.fillText('OHIO STADIUM',640,118);ctx.fillStyle='#fff';ctx.font='bold 14px Arial';ctx.fillText('SKYBOUND  •  HOME OF BRUTUS',640,145);ctx.textAlign='left';ctx.strokeStyle='#c6ced5';ctx.lineWidth=5;for(const x of [112,1168]){ctx.beginPath();ctx.moveTo(x,175);ctx.lineTo(x,64);ctx.stroke();ctx.fillStyle='#fff7b5';ctx.fillRect(x-22,53,44,13);} }
   function roundRect(x,y,w,h,r,fill) { ctx.fillStyle=fill; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
   function draw() {
     const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,level.sky[0]);g.addColorStop(.62,level.sky[1]);g.addColorStop(1,level.sky[2]);ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-    cloud(80+Math.sin(time*.1)*30,105,1.15); cloud(710+Math.sin(time*.13)*34,115,.75); cloud(1050+Math.sin(time*.08)*22,210,.58);
-    ctx.fillStyle='#a988d4'; for(let i=0;i<9;i++){let x=i*170-50,y=430+(i%3)*35;ctx.beginPath();ctx.moveTo(x,H);ctx.lineTo(x+115,y);ctx.lineTo(x+250,H);ctx.fill();}
+    stadium();
     ctx.save(); if(shake){ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake)}
     for(const [x,y,w,h] of level.platforms){ roundRect(x,y,w,h,9,'#563b75'); roundRect(x,y,w,8,8,level.ground); ctx.fillStyle='#5c4b84'; ctx.fillRect(x+10,y+10,w-20,h-10); }
     for(const [x,y,w] of level.spikes){ctx.fillStyle='#e85a7f'; for(let i=x;i<x+w;i+=17){ctx.beginPath();ctx.moveTo(i,y+21);ctx.lineTo(i+8.5,y);ctx.lineTo(i+17,y+21);ctx.fill();}}
@@ -107,7 +107,8 @@
     if(gems.every(g=>g.taken)){ctx.fillStyle='#fff2a8';ctx.font='bold 18px system-ui';ctx.fillText('GO!',gx-20,gy-95);}
     for(const gem of gems) if(!gem.taken){ const bob=Math.sin(time*4+gem.phase)*5;ctx.save();ctx.translate(gem.x,gem.y+bob);ctx.rotate(time*2);ctx.fillStyle='#ffe76a';ctx.beginPath();ctx.moveTo(0,-13);ctx.lineTo(9,0);ctx.lineTo(0,13);ctx.lineTo(-9,0);ctx.fill();ctx.restore(); }
     // Brutus Buckeye: oversized buckeye head, gray O-cap, striped jersey, red pants and white gloves
-    ctx.save();ctx.translate(player.x+18,player.y+24);ctx.scale(player.facing,1);
+    const airborneStretch=player.vy<-90?.12:player.vy>150?.045:0, landingSquish=player.land*.18;
+    ctx.save();ctx.translate(player.x+18,player.y+24);ctx.scale(player.facing*(1-airborneStretch+landingSquish),1+airborneStretch-landingSquish);
     ctx.fillStyle='#492018';ctx.beginPath();ctx.ellipse(0,-7,21,23,0,0,7);ctx.fill();
     ctx.strokeStyle='#82452d';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,-7,16,.4,4.9);ctx.stroke();
     ctx.fillStyle='#c8c2aa';ctx.beginPath();ctx.ellipse(3,-7,13,15,0,0,7);ctx.fill();
